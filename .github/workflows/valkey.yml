@@ -1,0 +1,78 @@
+name: valkey
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - valkey
+      - .github/workflows/valkey.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: darwin-arm64
+            runner: macos-14
+          - target: darwin-x64
+            runner: macos-15-intel
+          - target: linux-x64
+            runner: ubuntu-22.04
+          - target: linux-arm64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - run: make -C valkey valkey-server BUILD_TLS=no -j
+
+      - name: Check dynamic libraries
+        run: |
+          bin=valkey/src/valkey-server
+          if [ "$(uname)" = Darwin ]; then
+            otool -L "$bin"
+            bad=$(otool -L "$bin" | tail -n +2 | awk '{print $1}' | grep -vE '^(/usr/lib/|/System/)' || true)
+            if [ -n "$bad" ]; then
+              echo "Links outside /usr/lib and /System:"
+              echo "$bad"
+              exit 1
+            fi
+          else
+            ldd "$bin"
+          fi
+
+      - run: tar -czf valkey-server-${{ matrix.target }}.tar.gz -C valkey/src valkey-server
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: valkey-server-${{ matrix.target }}
+          path: valkey-server-${{ matrix.target }}.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="valkey-$(git -C valkey describe --tags --exact-match)"
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --notes "Standalone valkey-server binaries built from Valkey ${tag#valkey-}."
+          gh release upload "$tag" dist/*.tar.gz --clobber
