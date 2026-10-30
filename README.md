@@ -12,7 +12,7 @@ Each tool sits here as a git submodule that points at its upstream repo. I add n
 
 1. Releases are tagged `valkey-<version>`, for example `valkey-8.1.11`.
 2. Assets are named `valkey-server-<os>-<arch>.tar.gz`, for `darwin-arm64`, `darwin-x64`, `linux-x64` and `linux-arm64`. Each archive holds only `valkey-server`.
-3. A daily workflow checks Valkey's latest release. If there's no matching release here yet, it moves the submodule to that tag and builds it.
+3. The daily `upstream.yml` workflow checks Valkey's newest release tag. If there's no matching release here yet, it moves the submodule to that tag and builds it.
 
 ### MySQL
 
@@ -29,14 +29,22 @@ Each tool sits here as a git submodule that points at its upstream repo. I add n
 
 1. Releases are prereleases tagged `mysql-src-<version>`, for example `mysql-src-8.0.45`.
 2. Assets use the same names and root layout as the MySQL releases above.
-3. A daily workflow checks for the newest upstream `mysql-8.0.*` tag. If there's no matching `mysql-src-<version>` release yet, it moves the submodule to that tag and builds it.
+3. The submodule follows the newest MySQL release, whatever its line. Older lines such as 8.0 are built by hand with the `tag` input.
 
 ### Building another upstream tag
 
-`valkey.yml` and `mysql-source.yml` take an optional `tag` input when run by hand. With a tag such as `8.1.12` or `mysql-8.0.44`, the workflow checks out that upstream tag, builds it and publishes it as `valkey-8.1.12` or `mysql-src-8.0.44`. It doesn't move the submodule. Without a tag, it builds the pinned submodule.
+Every build workflow takes an optional `tag` input when run by hand. With a tag such as `8.1.12` or `mysql-8.0.44`, the workflow checks out that upstream tag, builds it and publishes it as `valkey-8.1.12` or `mysql-src-8.0.44`. It doesn't move the submodule. Without a tag, it builds the pinned submodule.
+
+### Staying current
+
+`upstream.yml` runs daily. For each submodule, it finds the newest upstream tag that matches the submodule's `tag-pattern`, skipping tags with a suffix such as `-rc1`. If there's no `<release-prefix><version>` release yet, it moves the submodule to that tag, commits, and starts the submodule's `workflow`.
 
 ## Add a tool
 
 1. Add its upstream repo as a submodule.
-2. Add a workflow that builds it without changes and publishes a release per upstream version.
-3. Add a section here.
+2. Set three keys on it in `.gitmodules`:
+   1. `tag-pattern`, a shell glob for its release tags, for example `[0-9]*.[0-9]*.[0-9]*`.
+   2. `release-prefix`, for example `valkey-`.
+   3. `workflow`, the build workflow's file name.
+3. Add that build workflow. It builds the submodule without changes, takes an optional `tag` input, and publishes a release named `<release-prefix><version>`.
+4. Add a section here.

@@ -1,7 +1,13 @@
 [submodule "valkey"]
 	path = valkey
 	url = https://github.com/valkey-io/valkey
+	tag-pattern = [0-9]*.[0-9]*.[0-9]*
+	release-prefix = valkey-
+	workflow = valkey.yml
 [submodule "mysql-server"]
 	path = mysql-server
 	url = https://github.com/mysql/mysql-server
 	shallow = true
+	tag-pattern = mysql-[0-9]*.[0-9]*.[0-9]*
+	release-prefix = mysql-src-
+	workflow = mysql-source.yml

@@ -44,6 +44,10 @@ jobs:
           git -C mysql-server fetch --depth 1 origin tag "$TAG"
           git -C mysql-server checkout "$TAG"
 
+      - name: Source revision
+        id: src
+        run: echo "rev=$(git -C mysql-server rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Install build tools
         run: |
           if [ "$(uname)" = Darwin ]; then
@@ -68,8 +72,8 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/ccache
-          key: ccache-${{ matrix.target }}-${{ inputs.tag }}-${{ github.sha }}
-          restore-keys: ccache-${{ matrix.target }}-${{ inputs.tag }}-
+          key: ccache-${{ matrix.target }}-${{ steps.src.outputs.rev }}-${{ github.run_id }}
+          restore-keys: ccache-${{ matrix.target }}-${{ steps.src.outputs.rev }}-
 
       - name: Configure
         env:
@@ -79,14 +83,17 @@ jobs:
             linkflags="-static-libstdc++ -static-libgcc -L$RUNNER_TEMP/static"
             curses="-DCURSES_CURSES_LIBRARY=$RUNNER_TEMP/static/libncurses.a -DCURSES_NCURSES_LIBRARY=$RUNNER_TEMP/static/libncurses.a"
           fi
+          # MySQL 8.3 and later carry Boost in the source tree.
+          if grep -q DOWNLOAD_BOOST mysql-server/cmake/boost.cmake; then
+            boost="-DWITH_BOOST=$RUNNER_TEMP/boost -DDOWNLOAD_BOOST=1"
+          fi
           cmake -S mysql-server -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_EXE_LINKER_FLAGS="$linkflags" \
             $curses \
-            -DWITH_BOOST="$RUNNER_TEMP/boost" \
-            -DDOWNLOAD_BOOST=1 \
+            $boost \
             -DWITH_SSL="$RUNNER_TEMP/ssl" \
             -DWITH_ZLIB=bundled \
             -DWITH_ZSTD=bundled \

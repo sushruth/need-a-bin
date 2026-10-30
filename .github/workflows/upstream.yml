@@ -1,0 +1,55 @@
+name: upstream
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Bump each submodule to its latest upstream tag
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          for key in $(git config -f .gitmodules --name-only --get-regexp '^submodule\..*\.path$'); do
+            name=${key#submodule.}
+            name=${name%.path}
+            path=$(git config -f .gitmodules "submodule.$name.path")
+            url=$(git config -f .gitmodules "submodule.$name.url")
+            pattern=$(git config -f .gitmodules "submodule.$name.tag-pattern")
+            prefix=$(git config -f .gitmodules "submodule.$name.release-prefix")
+            workflow=$(git config -f .gitmodules "submodule.$name.workflow")
+            latest=$(git ls-remote --tags --refs "$url" | awk -F/ '{print $3}' | while read -r t; do
+              case $t in $pattern) ;; *) continue ;; esac
+              v=${t##*[!0-9.]}
+              case ${t%"$v"} in *[0-9]*) continue ;; esac
+              echo "$v" | grep -qE '^[0-9]+(\.[0-9]+)*$' && echo "$t"
+            done | sort -V | tail -1)
+            version=${latest##*[!0-9.]}
+            if [ -z "$latest" ]; then
+              echo "$name: no tag matches $pattern"
+              continue
+            fi
+            if gh release view "$prefix$version" >/dev/null 2>&1; then
+              echo "$name: $prefix$version is already released"
+              continue
+            fi
+            git -C "$path" fetch --depth 1 origin tag "$latest"
+            git -C "$path" checkout "$latest"
+            git commit -m "Bump $name to $latest" -- "$path"
+            git push
+            # Pushes made with GITHUB_TOKEN don't trigger other workflows, so start the build directly.
+            gh workflow run "$workflow" --ref "$GITHUB_REF_NAME"
+          done
