@@ -81,8 +81,8 @@ jobs:
         run: |
           # MySQL 8.0 builds its bundled protobuf as a shared library unless CMAKE_CXX_FLAGS
           # matches -static-libgcc, and ignores protobuf_BUILD_SHARED_LIBS. Clang on macOS
-          # rejects -static-libgcc, so a no-op warning flag carries the match there.
-          cxxflags="-Wno-unknown-warning-option -Wno-static-libgcc"
+          # rejects -static-libgcc, so an unused macro carries the match there.
+          cxxflags="-DNEED_A_BIN_PROTOBUF_HINT=-static-libgcc"
           if [ "$(uname)" = Linux ]; then
             cxxflags="-static-libgcc -static-libstdc++"
             linkflags="-static-libstdc++ -static-libgcc -L$RUNNER_TEMP/static"
