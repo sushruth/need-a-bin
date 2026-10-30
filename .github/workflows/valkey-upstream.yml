@@ -1,0 +1,36 @@
+name: valkey-upstream
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Bump to the latest Valkey release
+        run: |
+          latest=$(gh release view --repo valkey-io/valkey --json tagName -q .tagName)
+          if gh release view "valkey-$latest" >/dev/null 2>&1; then
+            echo "valkey-$latest is already released"
+            exit 0
+          fi
+          git -C valkey fetch --depth 1 origin tag "$latest"
+          git -C valkey checkout "$latest"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git commit -am "Bump valkey to $latest"
+          git push
+          # Pushes made with GITHUB_TOKEN don't trigger other workflows, so start the build directly.
+          gh workflow run valkey.yml --ref main
