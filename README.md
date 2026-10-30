@@ -1,8 +1,8 @@
 # need-a-bin
 
-Some useful tools don't publish ready-to-run binaries on GitHub. This repo builds the ones we need.
+Some useful tools don't publish ready-to-run binaries on GitHub. This repo builds the ones I need.
 
-Each tool sits here as a git submodule that points at its upstream repo. We add nothing to the source. GitHub Actions builds it as-is, for the platforms we use, and publishes the binaries as release assets.
+Each tool sits here as a git submodule that points at its upstream repo. I add nothing to the source. GitHub Actions builds it as-is, for the platforms I use, and publishes the binaries as release assets.
 
 ## Tools
 
