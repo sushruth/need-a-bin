@@ -151,7 +151,7 @@ jobs:
               bad=$(otool -L "$b" | tail -n +2 | awk '{print $1}' | grep -vE '^(/usr/lib/|/System/)' || true)
             else
               ldd "$b"
-              bad=$(ldd "$b" | awk '{print $1}' | grep -vE '^(linux-vdso\.so\.1|/lib.*/ld-linux.*|lib(c|m|dl|pthread|rt)\.so\.[0-9]+|ld-linux.*)$' || true)
+              bad=$(ldd "$b" | awk '{print $1}' | grep -vE '^(linux-vdso\.so\.1|/lib.*/ld-linux.*|lib(c|m|dl|pthread|rt|resolv)\.so\.[0-9]+|ld-linux.*)$' || true)
             fi
             if [ -n "$bad" ]; then
               echo "$b needs libraries outside the allowed list:"
