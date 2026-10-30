@@ -65,12 +65,12 @@ jobs:
         run: |
           a=${{ matrix.deb_arch }}
           case $a in
-            amd64) sums="2dcfe0b49d7cccfbf1bd6a3f627cf44bea9f51fb32f7e0e552a0df75698e0d27 d9b8efb37a056e01c46d93c7ef6977aa04ad2586978137d9a3954c15ad5d14c3 d2597b5aec92a930cf549e1b429ad892595813e72ec7814685ea146a9fb715e5" ;;
-            arm64) sums="1bcb0d9c08aa35298741b1c68904844e9b71ebf64f15b3e05e6ec6f3fa01d93b 9fbcc4982756f6a975cb26c1a9323690d622c557b64e184c38746f0dbb19ea92 bff6bf29035a4bbd5aa3584bfbc86c2d414cb468a22dbd09fe601b0d39ce4e67" ;;
+            amd64) sums="2dcfe0b49d7cccfbf1bd6a3f627cf44bea9f51fb32f7e0e552a0df75698e0d27 d9b8efb37a056e01c46d93c7ef6977aa04ad2586978137d9a3954c15ad5d14c3 d2597b5aec92a930cf549e1b429ad892595813e72ec7814685ea146a9fb715e5 0721c89001fbbd1ada23e89da5d60e762763c1a7b3dc814a2e9a518480a8043d" ;;
+            arm64) sums="1bcb0d9c08aa35298741b1c68904844e9b71ebf64f15b3e05e6ec6f3fa01d93b 9fbcc4982756f6a975cb26c1a9323690d622c557b64e184c38746f0dbb19ea92 bff6bf29035a4bbd5aa3584bfbc86c2d414cb468a22dbd09fe601b0d39ce4e67 ca67a774b20ed639361715ef0981d236f294ff2987579b3d18faede67c3a9152" ;;
           esac
           set -- $sums
-          for deb in liba/libaio/libaio1_0.3.112-13build1 n/ncurses/libncurses5_6.3-2 n/ncurses/libtinfo5_6.3-2; do
-            case $deb in liba/*) comp=main ;; *) comp=universe ;; esac
+          for deb in liba/libaio/libaio1_0.3.112-13build1 n/ncurses/libncurses5_6.3-2 n/ncurses/libtinfo5_6.3-2 n/numactl/libnuma1_2.0.14-3ubuntu2; do
+            case $deb in liba/*|n/numactl/*) comp=main ;; *) comp=universe ;; esac
             f=$(basename "$deb")_$a.deb
             curl -fsSL -o "$f" "${{ matrix.deb_mirror }}/pool/$comp/$deb"_$a.deb
             echo "$1  $f" | sha256sum -c
@@ -78,7 +78,7 @@ jobs:
             dpkg-deb -x "$f" debs
           done
           mkdir -p pkg/lib/private
-          for l in libaio.so.1 libncurses.so.5 libtinfo.so.5; do
+          for l in libaio.so.1 libncurses.so.5 libtinfo.so.5 libnuma.so.1; do
             cp -L "$(find debs -name "$l" | head -1)" pkg/lib/private/"$l"
           done
           ls -l pkg/lib/private
@@ -143,5 +143,5 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="mysql-$(cat mysql/VERSION)"
-          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --notes "Oracle's MySQL ${tag#mysql-} binaries, pruned to mysqld and mysql. Linux builds also carry libaio, libncurses and libtinfo from Ubuntu 22.04 in lib/private."
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --notes "Oracle's MySQL ${tag#mysql-} binaries, pruned to mysqld and mysql. Linux builds also carry libaio, libncurses, libtinfo and libnuma from Ubuntu 22.04 in lib/private."
           gh release upload "$tag" dist/*.tar.gz --clobber

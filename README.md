@@ -18,7 +18,7 @@ Each tool sits here as a git submodule that points at its upstream repo. I add n
 
 `mysqld` and the `mysql` client, ready to run without installing anything else.
 
-1. These aren't my builds. They're Oracle's MySQL binaries, pruned down to what a local dev server needs. Linux archives also carry three old libraries in `lib/private`: `libaio.so.1`, `libncurses.so.5` and `libtinfo.so.5`, taken from Ubuntu 22.04 packages. Oracle's binaries need them, and current distros like Ubuntu 24.04 don't ship them.
+1. These aren't my builds. They're Oracle's MySQL binaries, pruned down to what a local dev server needs. Linux archives also carry four libraries in `lib/private`, taken from Ubuntu 22.04 packages: `libaio.so.1`, `libncurses.so.5`, `libtinfo.so.5` and `libnuma.so.1`. Oracle's binaries need them, and current distros like Ubuntu 24.04 either ship renamed versions or none at all.
 2. Releases are tagged `mysql-<version>`, for example `mysql-8.0.45`.
 3. Assets are named `mysql-<os>-<arch>.tar.gz`, for `darwin-arm64`, `darwin-x64`, `linux-x64` and `linux-arm64`. Each archive holds `bin/`, `lib/` and `share/` at its root.
 4. There's no submodule, since Oracle's binaries are the upstream. The version lives in `mysql/VERSION`, and I bump it by hand.
