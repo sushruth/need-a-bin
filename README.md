@@ -29,6 +29,7 @@ Each tool sits here as a git submodule that points at its upstream repo. I add n
 
 1. Releases are prereleases tagged `mysql-src-<version>`, for example `mysql-src-8.0.45`.
 2. Assets use the same names and root layout as the MySQL releases above.
+3. A daily workflow checks for the newest upstream `mysql-8.0.*` tag. If there's no matching `mysql-src-<version>` release yet, it moves the submodule to that tag and builds it.
 
 ### Building another upstream tag
 
