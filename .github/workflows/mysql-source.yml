@@ -51,12 +51,12 @@ jobs:
       - name: Install build tools
         run: |
           if [ "$(uname)" = Darwin ]; then
-            brew install bison ccache openssl@3
+            brew install bison ccache ninja openssl@3
             echo "$(brew --prefix bison)/bin" >> "$GITHUB_PATH"
             ssl=$(brew --prefix openssl@3)
           else
             sudo apt-get update
-            sudo apt-get install -y bison ccache libssl-dev libncurses-dev libaio-dev
+            sudo apt-get install -y bison ccache ninja-build libssl-dev libncurses-dev libaio-dev
             ssl=/usr
           fi
           mkdir -p "$RUNNER_TEMP/ssl/lib" "$RUNNER_TEMP/static"
@@ -79,7 +79,11 @@ jobs:
         env:
           CCACHE_DIR: ${{ runner.temp }}/ccache
         run: |
+          # MySQL builds its bundled protobuf as a shared library unless CMAKE_CXX_FLAGS
+          # contains -static-libgcc. Clang on macOS only warns that the flag is unused.
+          cxxflags=-static-libgcc
           if [ "$(uname)" = Linux ]; then
+            cxxflags="-static-libgcc -static-libstdc++"
             linkflags="-static-libstdc++ -static-libgcc -L$RUNNER_TEMP/static"
             curses="-DCURSES_CURSES_LIBRARY=$RUNNER_TEMP/static/libncurses.a -DCURSES_NCURSES_LIBRARY=$RUNNER_TEMP/static/libncurses.a"
           fi
@@ -87,13 +91,18 @@ jobs:
           if grep -q DOWNLOAD_BOOST mysql-server/cmake/boost.cmake; then
             boost="-DWITH_BOOST=$RUNNER_TEMP/boost -DDOWNLOAD_BOOST=1"
           fi
-          cmake -S mysql-server -B build \
+          if grep -q 'disable CURL' mysql-server/CMakeLists.txt; then
+            curl=-DWITH_CURL=0
+          fi
+          cmake -S mysql-server -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_FLAGS="$cxxflags" \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
             -DCMAKE_EXE_LINKER_FLAGS="$linkflags" \
             $curses \
             $boost \
+            $curl \
             -DWITH_SSL="$RUNNER_TEMP/ssl" \
             -DWITH_ZLIB=bundled \
             -DWITH_ZSTD=bundled \
