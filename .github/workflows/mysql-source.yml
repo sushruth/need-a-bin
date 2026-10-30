@@ -79,9 +79,10 @@ jobs:
         env:
           CCACHE_DIR: ${{ runner.temp }}/ccache
         run: |
-          # MySQL builds its bundled protobuf as a shared library unless CMAKE_CXX_FLAGS
-          # contains -static-libgcc. Clang on macOS only warns that the flag is unused.
-          cxxflags=-static-libgcc
+          # MySQL 8.0 builds its bundled protobuf as a shared library unless CMAKE_CXX_FLAGS
+          # matches -static-libgcc, and ignores protobuf_BUILD_SHARED_LIBS. Clang on macOS
+          # rejects -static-libgcc, so a no-op warning flag carries the match there.
+          cxxflags="-Wno-unknown-warning-option -Wno-static-libgcc"
           if [ "$(uname)" = Linux ]; then
             cxxflags="-static-libgcc -static-libstdc++"
             linkflags="-static-libstdc++ -static-libgcc -L$RUNNER_TEMP/static"
@@ -103,6 +104,8 @@ jobs:
             $curses \
             $boost \
             $curl \
+            -Dprotobuf_BUILD_SHARED_LIBS=OFF \
+            -DWITH_AUTHENTICATION_WEBAUTHN=OFF \
             -DWITH_SSL="$RUNNER_TEMP/ssl" \
             -DWITH_ZLIB=bundled \
             -DWITH_ZSTD=bundled \
