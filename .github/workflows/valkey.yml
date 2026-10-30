@@ -2,6 +2,11 @@ name: valkey
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Upstream Valkey tag to build instead of the pinned submodule, for example 8.1.12
+        required: false
+        default: ''
   push:
     branches: [main]
     paths:
@@ -30,6 +35,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+
+      - name: Check out upstream tag
+        if: inputs.tag != ''
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          git -C valkey fetch --depth 1 origin tag "$TAG"
+          git -C valkey checkout "$TAG"
 
       - run: make -C valkey valkey-server BUILD_TLS=no -j
 
@@ -72,7 +85,8 @@ jobs:
       - name: Publish release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
         run: |
-          tag="valkey-$(git -C valkey describe --tags --exact-match)"
+          tag="valkey-${TAG:-$(git -C valkey describe --tags --exact-match)}"
           gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --title "$tag" --notes "Standalone valkey-server binaries built from Valkey ${tag#valkey-}."
           gh release upload "$tag" dist/*.tar.gz --clobber

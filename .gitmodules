@@ -1,3 +1,7 @@
 [submodule "valkey"]
 	path = valkey
 	url = https://github.com/valkey-io/valkey
+[submodule "mysql-server"]
+	path = mysql-server
+	url = https://github.com/mysql/mysql-server
+	shallow = true

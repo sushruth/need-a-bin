@@ -23,6 +23,17 @@ Each tool sits here as a git submodule that points at its upstream repo. I add n
 3. Assets are named `mysql-<os>-<arch>.tar.gz`, for `darwin-arm64`, `darwin-x64`, `linux-x64` and `linux-arm64`. Each archive holds `bin/`, `lib/` and `share/` at its root.
 4. There's no submodule, since Oracle's binaries are the upstream. The version lives in `mysql/VERSION`, and I bump it by hand.
 
+### MySQL from source
+
+`mysqld` and `mysql` built from the `mysql-server` submodule by `mysql-source.yml`, with OpenSSL, libaio, ncurses and libstdc++ linked in statically.
+
+1. Releases are prereleases tagged `mysql-src-<version>`, for example `mysql-src-8.0.45`.
+2. Assets use the same names and root layout as the MySQL releases above.
+
+### Building another upstream tag
+
+`valkey.yml` and `mysql-source.yml` take an optional `tag` input when run by hand. With a tag such as `8.1.12` or `mysql-8.0.44`, the workflow checks out that upstream tag, builds it and publishes it as `valkey-8.1.12` or `mysql-src-8.0.44`. It doesn't move the submodule. Without a tag, it builds the pinned submodule.
+
 ## Add a tool
 
 1. Add its upstream repo as a submodule.

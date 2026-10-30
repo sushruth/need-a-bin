@@ -1,0 +1,194 @@
+name: mysql-source
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Upstream mysql-server tag to build instead of the pinned submodule, for example mysql-8.0.44
+        required: false
+        default: ''
+  push:
+    branches: [mysql-source]
+    paths:
+      - mysql-server
+      - .github/workflows/mysql-source.yml
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: darwin-arm64
+            runner: macos-14
+          - target: darwin-x64
+            runner: macos-15-intel
+          - target: linux-x64
+            runner: ubuntu-22.04
+          - target: linux-arm64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Check out upstream tag
+        if: inputs.tag != ''
+        env:
+          TAG: ${{ inputs.tag }}
+        run: |
+          git -C mysql-server fetch --depth 1 origin tag "$TAG"
+          git -C mysql-server checkout "$TAG"
+
+      - name: Install build tools
+        run: |
+          if [ "$(uname)" = Darwin ]; then
+            brew install bison ccache openssl@3
+            echo "$(brew --prefix bison)/bin" >> "$GITHUB_PATH"
+            ssl=$(brew --prefix openssl@3)
+          else
+            sudo apt-get update
+            sudo apt-get install -y bison ccache libssl-dev libncurses-dev libaio-dev
+            ssl=/usr
+          fi
+          mkdir -p "$RUNNER_TEMP/ssl/lib" "$RUNNER_TEMP/static"
+          ln -s "$ssl/include" "$RUNNER_TEMP/ssl/include"
+          cp "$(find -L "$ssl/lib" -name libssl.a | head -1)" "$(find -L "$ssl/lib" -name libcrypto.a | head -1)" "$RUNNER_TEMP/ssl/lib/"
+          if [ "$(uname)" = Linux ]; then
+            for l in libaio.a libtinfo.a libncurses.a libcrypt.a; do
+              cp "$(find /usr/lib -name "$l" | head -1)" "$RUNNER_TEMP/static/"
+            done
+          fi
+          ls -l "$RUNNER_TEMP/ssl/lib" "$RUNNER_TEMP/static"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/ccache
+          key: ccache-${{ matrix.target }}-${{ inputs.tag }}-${{ github.sha }}
+          restore-keys: ccache-${{ matrix.target }}-${{ inputs.tag }}-
+
+      - name: Configure
+        env:
+          CCACHE_DIR: ${{ runner.temp }}/ccache
+        run: |
+          if [ "$(uname)" = Linux ]; then
+            linkflags="-static-libstdc++ -static-libgcc -L$RUNNER_TEMP/static"
+            curses="-DCURSES_CURSES_LIBRARY=$RUNNER_TEMP/static/libncurses.a -DCURSES_NCURSES_LIBRARY=$RUNNER_TEMP/static/libncurses.a"
+          fi
+          cmake -S mysql-server -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_EXE_LINKER_FLAGS="$linkflags" \
+            $curses \
+            -DWITH_BOOST="$RUNNER_TEMP/boost" \
+            -DDOWNLOAD_BOOST=1 \
+            -DWITH_SSL="$RUNNER_TEMP/ssl" \
+            -DWITH_ZLIB=bundled \
+            -DWITH_ZSTD=bundled \
+            -DWITH_LZ4=bundled \
+            -DWITH_PROTOBUF=bundled \
+            -DWITH_EDITLINE=bundled \
+            -DWITH_NUMA=OFF \
+            -DWITH_ROUTER=OFF \
+            -DWITH_UNIT_TESTS=OFF \
+            -DWITH_NDB=OFF \
+            -DWITH_NDBCLUSTER=OFF \
+            -DWITHOUT_GROUP_REPLICATION=1 \
+            -DWITH_MYSQLX=OFF \
+            -DWITH_DEBUG=OFF \
+            -DINSTALL_MYSQLTESTDIR=
+
+      - name: Build
+        env:
+          CCACHE_DIR: ${{ runner.temp }}/ccache
+          CCACHE_MAXSIZE: 2G
+        run: |
+          cmake --build build --target mysqld mysql --parallel "$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu)"
+          ccache -s
+
+      - name: Package
+        run: |
+          mkdir -p pkg/bin pkg/lib pkg/share
+          cp build/runtime_output_directory/mysqld build/runtime_output_directory/mysql pkg/bin/
+          if [ "$(uname)" = Darwin ]; then strip -x pkg/bin/*; else strip pkg/bin/*; fi
+          cp -R build/share/english pkg/share/
+          cp -R mysql-server/share/charsets pkg/share/
+          find pkg/share/charsets ! -name '*.xml' ! -name README -type f -delete
+          du -sh pkg pkg/*
+
+      - name: Verify
+        working-directory: pkg
+        run: |
+          bin/mysqld --version
+          bin/mysql --version
+          for b in bin/mysqld bin/mysql; do
+            if [ "$(uname)" = Darwin ]; then
+              otool -L "$b"
+              bad=$(otool -L "$b" | tail -n +2 | awk '{print $1}' | grep -vE '^(/usr/lib/|/System/)' || true)
+            else
+              ldd "$b"
+              bad=$(ldd "$b" | awk '{print $1}' | grep -vE '^(linux-vdso\.so\.1|/lib.*/ld-linux.*|lib(c|m|dl|pthread|rt)\.so\.[0-9]+|ld-linux.*)$' || true)
+            fi
+            if [ -n "$bad" ]; then
+              echo "$b needs libraries outside the allowed list:"
+              echo "$bad"
+              exit 1
+            fi
+          done
+
+      - name: Smoke test
+        working-directory: pkg
+        run: |
+          bin/mysqld --no-defaults --initialize-insecure --datadir="$RUNNER_TEMP/d" --basedir="$PWD"
+          bin/mysqld --no-defaults --datadir="$RUNNER_TEMP/d" --basedir="$PWD" --socket="$RUNNER_TEMP/s.sock" --port=3399 --log-error="$RUNNER_TEMP/err.log" &
+          pid=$!
+          for i in $(seq 60); do
+            bin/mysql -uroot -h127.0.0.1 -P3399 -e 'select version()' && ok=1 && break
+            sleep 1
+          done
+          kill $pid || true
+          wait $pid || true
+          if [ -z "$ok" ]; then
+            cat "$RUNNER_TEMP/err.log"
+            exit 1
+          fi
+
+      - run: tar -czf mysql-${{ matrix.target }}.tar.gz -C pkg $(ls -A pkg)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mysql-${{ matrix.target }}
+          path: mysql-${{ matrix.target }}.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          if [ -n "$TAG" ]; then
+            v=${TAG#mysql-}
+          else
+            . mysql-server/MYSQL_VERSION
+            v=$MYSQL_VERSION_MAJOR.$MYSQL_VERSION_MINOR.$MYSQL_VERSION_PATCH
+          fi
+          tag="mysql-src-$v"
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" --prerelease --target "$GITHUB_SHA" --title "$tag" --notes "MySQL $v built from source: mysqld and mysql only, with OpenSSL, libaio, ncurses and libstdc++ linked statically."
+          gh release upload "$tag" dist/*.tar.gz --clobber
