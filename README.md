@@ -1,9 +1,21 @@
 # need-a-bin
 
-This repo builds standalone `valkey-server` binaries on GitHub Actions and publishes them as release assets, so local dev scripts can download them instead of compiling.
+Some useful tools don't publish ready-to-run binaries on GitHub. This repo builds the ones we need.
 
-Each release is tagged `valkey-<version>`, for example `valkey-8.1.11`. It has one asset per platform, named `valkey-server-<os>-<arch>.tar.gz`, where the platform is one of `darwin-arm64`, `darwin-x64`, `linux-x64` or `linux-arm64`. Each archive holds only the `valkey-server` binary at its root.
+Each tool sits here as a git submodule that points at its upstream repo. We add nothing to the source. GitHub Actions builds it as-is, for the platforms we use, and publishes the binaries as release assets.
 
-A daily workflow checks Valkey's latest release. When it has no matching release here, the workflow moves the `valkey` submodule to that tag, pushes, and starts the build.
+## Tools
 
-To bump Valkey by hand, check out a new tag in the `valkey` submodule, commit the submodule change, and push to `main`. The workflow builds the new version and publishes its release.
+### Valkey
+
+`valkey-server` with TLS off and no extra libraries needed.
+
+1. Releases are tagged `valkey-<version>`, for example `valkey-8.1.11`.
+2. Assets are named `valkey-server-<os>-<arch>.tar.gz`, for `darwin-arm64`, `darwin-x64`, `linux-x64` and `linux-arm64`. Each archive holds only `valkey-server`.
+3. A daily workflow checks Valkey's latest release. If there's no matching release here yet, it moves the submodule to that tag and builds it.
+
+## Add a tool
+
+1. Add its upstream repo as a submodule.
+2. Add a workflow that builds it without changes and publishes a release per upstream version.
+3. Add a section here.
