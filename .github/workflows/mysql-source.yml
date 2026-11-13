@@ -95,6 +95,12 @@ jobs:
           if grep -q 'disable CURL' mysql-server/CMakeLists.txt; then
             curl=-DWITH_CURL=0
           fi
+          # Newer MySQL only links a custom WITH_SSL path as shared libraries, so point
+          # its FindOpenSSL lookup at the static copies instead.
+          ssl="-DWITH_SSL=$RUNNER_TEMP/ssl"
+          if grep -q 'IMPORTED_LOCATION "${COPIED_OPENSSL_LIBRARY}"' mysql-server/cmake/ssl.cmake; then
+            ssl="-DWITH_SSL=system -DOPENSSL_ROOT_DIR=$RUNNER_TEMP/ssl -DOPENSSL_USE_STATIC_LIBS=TRUE"
+          fi
           cmake -S mysql-server -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_CXX_FLAGS="$cxxflags" \
@@ -106,7 +112,7 @@ jobs:
             $curl \
             -Dprotobuf_BUILD_SHARED_LIBS=OFF \
             -DWITH_AUTHENTICATION_WEBAUTHN=OFF \
-            -DWITH_SSL="$RUNNER_TEMP/ssl" \
+            $ssl \
             -DWITH_ZLIB=bundled \
             -DWITH_ZSTD=bundled \
             -DWITH_LZ4=bundled \
